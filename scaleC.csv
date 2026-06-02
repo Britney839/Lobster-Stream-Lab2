@@ -1,0 +1,5 @@
+events_millions,resting_orders,submit_ns,cancel_ns,best_bid_lookup_ns,bytes_per_order
+16,4396193,2500,2200,1000,326
+33,8792071,8800,3900,500,276
+50,13183892,1700,400,500,264
+67,17580427,1700,200,900,223
