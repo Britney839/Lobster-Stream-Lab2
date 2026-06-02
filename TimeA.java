@@ -2,339 +2,429 @@ import java.util.*;
 import java.io.*;
 
 public class TimeA {
-    static final int[] SIZES = {1_000, 10_000, 100_000, 1_000_000, 10_000_000};
-    static final int OPS = 1_000_000;
+    static int[] SIZES = { 1_000 };
+    static int OPS = 1_000_000;
     static final Random RAND = new Random(42);
     static long sink = 0;
 
-    // new constants for memory measurement
-    static final int MEM_N = 1_000_000; // number of elements to allocate for each structure
+    static int MEM_N = 1_000_000;
+    static int WARMUP = 10_000;
     static final int MEM_WAIT_MS = 200;
+    static final String BASE_PATH = "C:\\Users\\britney.harris\\Documents\\Lobster-Stream\\Lobster-Stream-Lab2\\";
 
-   public static void main(String[] args) throws IOException, InterruptedException {
-    // ---- Part A: timing ----
-    PrintWriter csv = new PrintWriter(new FileWriter("C:\\Users\\emily.elliott\\Documents\\Java Lab 2\\Lobster-Stream-Lab2\\timeA.csv"));
-    csv.println("Structure,Operation,Size,NanosecondsPerOp");
-    System.out.printf("%-15s %-15s %-10s %-20s %-10s\n", "Structure", "Operation", "Size", "ns/op", "Ratio");
-    for (TestCase test : TestCase.values()) {
-        long prev = -1;
-        for (int n : SIZES) {
-            long ns = test.run(n, csv);
-            double ratio = prev > 0 ? (double) ns / prev : 0;
-            String ratioStr = prev > 0 ? String.format("%.2f", ratio) : "-";
-            System.out.printf("%-15s %-15s %-10d %-20d %-10s\n", test.structure, test.operation, n, ns, ratioStr);
-            prev = ns;
-        }
-        System.out.println();
+    static void updateWarmup() {
+        // keep warmup reasonable relative to OPS (e.g. max OPS/10, at least 1)
+        int cap = Math.max(1, OPS / 10);
+        WARMUP = Math.max(1, Math.min(WARMUP, cap));
+        // avoid excessively large warmups
+        WARMUP = Math.min(WARMUP, 100_000);
     }
-    csv.close();
-    System.out.println("sink=" + sink);
 
-    // ---- Part B: memory ----
-    PrintWriter memCsv = new PrintWriter(new FileWriter("C:\\Users\\emily.elliott\\Documents\\Java Lab 2\\Lobster-Stream-Lab2\\memoryB.csv"));
-    memCsv.println("Structure,Elements,BytesPerElement,UsedBefore,UsedAfter");
-    System.out.printf("\n%-15s %-12s %-18s %-12s %-12s\n", "Structure", "Elements", "BytesPerElement", "UsedBefore", "UsedAfter");
+    public static void main(String[] args) throws IOException, InterruptedException {
+        for (String a : args) {
+            if ("--fast".equals(a)) {
+                OPS = 100_000;
+                MEM_N = 100_000;
+                WARMUP = 1_000;
+                SIZES = new int[] { 1_000 };
+            }
+        }
+        updateWarmup();
+        // ---- Part A: timing ----
+        BufferedWriter csv = new BufferedWriter(new FileWriter(BASE_PATH + "timeA.csv"));
+        csv.write("Structure,Operation,Size,NanosecondsPerOp");
+        csv.newLine();
+        System.out.printf("%-15s %-15s %-10s %-20s %-10s\n", "Structure", "Operation", "Size", "ns/op", "Ratio");
+        for (TestCase test : TestCase.values()) {
+            long prev = -1;
+            for (int n : SIZES) {
+                long ns = test.run(n, csv);
+                double ratio = prev > 0 ? (double) ns / prev : 0;
+                String ratioStr = prev > 0 ? String.format("%.2f", ratio) : "-";
+                System.out.printf("%-15s %-15s %-10d %-20d %-10s\n", test.structure, test.operation, n, ns, ratioStr);
+                prev = ns;
+            }
+            System.out.println();
+        }
+        csv.flush();
+        csv.close();
+        System.out.println("timeA.csv written");
+        System.out.println("sink=" + sink);
 
-    measureMemoryArrayList(memCsv);
-    measureMemoryLinkedList(memCsv);
-    measureMemoryArrayDeque(memCsv);
-    measureMemoryHashSet(memCsv);
-    measureMemoryTreeSet(memCsv);
-    measureMemoryHashMap(memCsv);
-    measureMemoryTreeMap(memCsv);
-    measureMemoryPriorityQueue(memCsv);
+        // ---- Part B: memory ----
+        BufferedWriter memCsv = new BufferedWriter(new FileWriter(BASE_PATH + "memoryB.csv"));
+        memCsv.write("Structure,Elements,BytesPerElement,UsedBefore,UsedAfter");
+        memCsv.newLine();
+        System.out.printf("\n%-15s %-12s %-18s %-12s %-12s\n", "Structure", "Elements", "BytesPerElement", "UsedBefore",
+                "UsedAfter");
 
-    memCsv.close();
-}
+        measureMemoryArrayList(memCsv);
+        measureMemoryLinkedList(memCsv);
+        measureMemoryArrayDeque(memCsv);
+        measureMemoryHashSet(memCsv);
+        measureMemoryTreeSet(memCsv);
+        measureMemoryHashMap(memCsv);
+        measureMemoryTreeMap(memCsv);
+        measureMemoryPriorityQueue(memCsv);
+
+        memCsv.flush();
+        memCsv.close();
+        System.out.println("memoryB.csv written");
+    }
 
     enum TestCase {
         ARRAYLIST_GET("ArrayList", "get(index)") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 ArrayList<Integer> list = new ArrayList<>(n);
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.get(RAND.nextInt(n)));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += list.get(RAND.nextInt(n));
+                for (int i = 0; i < OPS; i++)
+                    sink += list.get(RAND.nextInt(n));
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("ArrayList,get(index),%d,%d\n", n, ns);
+                csv.write(String.format("ArrayList,get(index),%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         ARRAYLIST_ADD_END("ArrayList", "add-at-end") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 ArrayList<Integer> list = new ArrayList<>(n);
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.add(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    list.add(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("ArrayList,add-at-end,%d,%d\n", n, ns);
+                csv.write(String.format("ArrayList,add-at-end,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         ARRAYLIST_ADD_FRONT("ArrayList", "add-at-front") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 ArrayList<Integer> list = new ArrayList<>(n);
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.add(0, RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) list.add(0, RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    list.add(0, RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("ArrayList,add-at-front,%d,%d\n", n, ns);
+                csv.write(String.format("ArrayList,add-at-front,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         LINKEDLIST_GET("LinkedList", "get(index)") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 LinkedList<Integer> list = new LinkedList<>();
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.get(RAND.nextInt(n)));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += list.get(RAND.nextInt(n));
+                for (int i = 0; i < OPS; i++)
+                    sink += list.get(RAND.nextInt(n));
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("LinkedList,get(index),%d,%d\n", n, ns);
+                csv.write(String.format("LinkedList,get(index),%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         LINKEDLIST_ADD_END("LinkedList", "add-at-end") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 LinkedList<Integer> list = new LinkedList<>();
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.add(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    list.add(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("LinkedList,add-at-end,%d,%d\n", n, ns);
+                csv.write(String.format("LinkedList,add-at-end,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         LINKEDLIST_ADD_FRONT("LinkedList", "add-at-front") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 LinkedList<Integer> list = new LinkedList<>();
-                for (int i = 0; i < n; i++) list.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    list.add(RAND.nextInt());
                 warmup(() -> list.addFirst(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) list.addFirst(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    list.addFirst(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("LinkedList,add-at-front,%d,%d\n", n, ns);
+                csv.write(String.format("LinkedList,add-at-front,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         ARRAYDEQUE_ADD_END("ArrayDeque", "add-at-end") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 ArrayDeque<Integer> dq = new ArrayDeque<>(n);
-                for (int i = 0; i < n; i++) dq.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    dq.add(RAND.nextInt());
                 warmup(() -> dq.addLast(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) dq.addLast(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    dq.addLast(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("ArrayDeque,add-at-end,%d,%d\n", n, ns);
+                csv.write(String.format("ArrayDeque,add-at-end,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         ARRAYDEQUE_ADD_FRONT("ArrayDeque", "add-at-front") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 ArrayDeque<Integer> dq = new ArrayDeque<>(n);
-                for (int i = 0; i < n; i++) dq.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    dq.add(RAND.nextInt());
                 warmup(() -> dq.addFirst(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) dq.addFirst(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    dq.addFirst(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("ArrayDeque,add-at-front,%d,%d\n", n, ns);
+                csv.write(String.format("ArrayDeque,add-at-front,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         HASHSET_CONTAINS("HashSet", "contains") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 HashSet<Integer> set = new HashSet<>(n);
-                for (int i = 0; i < n; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    set.add(RAND.nextInt());
                 warmup(() -> set.contains(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += set.contains(RAND.nextInt()) ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += set.contains(RAND.nextInt()) ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("HashSet,contains,%d,%d\n", n, ns);
+                csv.write(String.format("HashSet,contains,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         HASHSET_ADD("HashSet", "add") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 HashSet<Integer> set = new HashSet<>(n);
-                for (int i = 0; i < n; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    set.add(RAND.nextInt());
                 warmup(() -> set.add(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    set.add(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("HashSet,add,%d,%d\n", n, ns);
+                csv.write(String.format("HashSet,add,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         TREESET_CONTAINS("TreeSet", "contains") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 TreeSet<Integer> set = new TreeSet<>();
-                for (int i = 0; i < n; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    set.add(RAND.nextInt());
                 warmup(() -> set.contains(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += set.contains(RAND.nextInt()) ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += set.contains(RAND.nextInt()) ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("TreeSet,contains,%d,%d\n", n, ns);
+                csv.write(String.format("TreeSet,contains,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         TREESET_ADD("TreeSet", "add") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 TreeSet<Integer> set = new TreeSet<>();
-                for (int i = 0; i < n; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    set.add(RAND.nextInt());
                 warmup(() -> set.add(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) set.add(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    set.add(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("TreeSet,add,%d,%d\n", n, ns);
+                csv.write(String.format("TreeSet,add,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         HASHMAP_PUT("HashMap", "put") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 HashMap<Integer, Integer> map = new HashMap<>(n);
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.put(RAND.nextInt(), RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("HashMap,put,%d,%d\n", n, ns);
+                csv.write(String.format("HashMap,put,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         HASHMAP_GET("HashMap", "get") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 HashMap<Integer, Integer> map = new HashMap<>(n);
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.get(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += map.get(RAND.nextInt()) != null ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += map.get(RAND.nextInt()) != null ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("HashMap,get,%d,%d\n", n, ns);
+                csv.write(String.format("HashMap,get,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         HASHMAP_CONTAINS("HashMap", "containsKey") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 HashMap<Integer, Integer> map = new HashMap<>(n);
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.containsKey(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += map.containsKey(RAND.nextInt()) ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += map.containsKey(RAND.nextInt()) ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("HashMap,containsKey,%d,%d\n", n, ns);
+                csv.write(String.format("HashMap,containsKey,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         TREEMAP_PUT("TreeMap", "put") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 TreeMap<Integer, Integer> map = new TreeMap<>();
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.put(RAND.nextInt(), RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("TreeMap,put,%d,%d\n", n, ns);
+                csv.write(String.format("TreeMap,put,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         TREEMAP_GET("TreeMap", "get") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 TreeMap<Integer, Integer> map = new TreeMap<>();
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.get(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += map.get(RAND.nextInt()) != null ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += map.get(RAND.nextInt()) != null ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("TreeMap,get,%d,%d\n", n, ns);
+                csv.write(String.format("TreeMap,get,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         TREEMAP_CONTAINS("TreeMap", "containsKey") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 TreeMap<Integer, Integer> map = new TreeMap<>();
-                for (int i = 0; i < n; i++) map.put(RAND.nextInt(), RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    map.put(RAND.nextInt(), RAND.nextInt());
                 warmup(() -> map.containsKey(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += map.containsKey(RAND.nextInt()) ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += map.containsKey(RAND.nextInt()) ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("TreeMap,containsKey,%d,%d\n", n, ns);
+                csv.write(String.format("TreeMap,containsKey,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         PRIORITYQUEUE_OFFER("PriorityQueue", "offer") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 PriorityQueue<Integer> pq = new PriorityQueue<>();
-                for (int i = 0; i < n; i++) pq.offer(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    pq.offer(RAND.nextInt());
                 warmup(() -> pq.offer(RAND.nextInt()));
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) pq.offer(RAND.nextInt());
+                for (int i = 0; i < OPS; i++)
+                    pq.offer(RAND.nextInt());
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("PriorityQueue,offer,%d,%d\n", n, ns);
+                csv.write(String.format("PriorityQueue,offer,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         PRIORITYQUEUE_POLL("PriorityQueue", "poll") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 PriorityQueue<Integer> pq = new PriorityQueue<>();
-                for (int i = 0; i < n; i++) pq.offer(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    pq.offer(RAND.nextInt());
                 warmup(() -> pq.poll());
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += pq.poll() != null ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += pq.poll() != null ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("PriorityQueue,poll,%d,%d\n", n, ns);
+                csv.write(String.format("PriorityQueue,poll,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         },
         PRIORITYQUEUE_PEEK("PriorityQueue", "peek") {
-            long run(int n, PrintWriter csv) {
+            long run(int n, BufferedWriter csv) throws IOException {
                 PriorityQueue<Integer> pq = new PriorityQueue<>();
-                for (int i = 0; i < n; i++) pq.offer(RAND.nextInt());
+                for (int i = 0; i < n; i++)
+                    pq.offer(RAND.nextInt());
                 warmup(() -> pq.peek());
                 long t0 = System.nanoTime();
-                for (int i = 0; i < OPS; i++) sink += pq.peek() != null ? 1 : 0;
+                for (int i = 0; i < OPS; i++)
+                    sink += pq.peek() != null ? 1 : 0;
                 long t1 = System.nanoTime();
                 long ns = (t1 - t0) / OPS;
-                csv.printf("PriorityQueue,peek,%d,%d\n", n, ns);
+                csv.write(String.format("PriorityQueue,peek,%d,%d", n, ns));
+                csv.newLine();
                 return ns;
             }
         };
 
         final String structure, operation;
+
         TestCase(String structure, String operation) {
             this.structure = structure;
             this.operation = operation;
         }
-        abstract long run(int n, PrintWriter csv);
+
+        abstract long run(int n, BufferedWriter csv) throws IOException;
     }
 
     static void warmup(Runnable op) {
-        for (int i = 0; i < OPS; i++) op.run();
+        for (int i = 0; i < OPS; i++)
+            op.run();
     }
 
-    // helper for memory measurements
     static long usedMemory() {
         Runtime rt = Runtime.getRuntime();
         return rt.totalMemory() - rt.freeMemory();
@@ -343,120 +433,136 @@ public class TimeA {
     static void gcAndWait() {
         System.gc();
         System.runFinalization();
-        try { Thread.sleep(MEM_WAIT_MS); } catch (InterruptedException e) { /* ignore */ }
+        try {
+            Thread.sleep(MEM_WAIT_MS);
+        } catch (InterruptedException e) {
+            /* ignore */ }
     }
 
-    
-
-    // individual measurement methods to ensure single structure at a time and allow nulling
-    static void measureMemoryArrayList(PrintWriter memCsv) {
+    static void measureMemoryArrayList(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         ArrayList<Integer> list = new ArrayList<>(MEM_N);
-        for (int i = 0; i < MEM_N; i++) list.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            list.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "ArrayList", MEM_N, bytesPer, before, after);
-        memCsv.printf("ArrayList,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("ArrayList,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         list = null;
         gcAndWait();
     }
 
-    static void measureMemoryLinkedList(PrintWriter memCsv) {
+    static void measureMemoryLinkedList(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         LinkedList<Integer> list = new LinkedList<>();
-        for (int i = 0; i < MEM_N; i++) list.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            list.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "LinkedList", MEM_N, bytesPer, before, after);
-        memCsv.printf("LinkedList,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("LinkedList,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         list = null;
         gcAndWait();
     }
 
-    static void measureMemoryArrayDeque(PrintWriter memCsv) {
+    static void measureMemoryArrayDeque(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         ArrayDeque<Integer> dq = new ArrayDeque<>(MEM_N);
-        for (int i = 0; i < MEM_N; i++) dq.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            dq.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "ArrayDeque", MEM_N, bytesPer, before, after);
-        memCsv.printf("ArrayDeque,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("ArrayDeque,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         dq = null;
         gcAndWait();
     }
 
-    static void measureMemoryHashSet(PrintWriter memCsv) {
+    static void measureMemoryHashSet(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         HashSet<Integer> set = new HashSet<>(MEM_N);
-        for (int i = 0; i < MEM_N; i++) set.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            set.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "HashSet", MEM_N, bytesPer, before, after);
-        memCsv.printf("HashSet,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("HashSet,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         set = null;
         gcAndWait();
     }
 
-    static void measureMemoryTreeSet(PrintWriter memCsv) {
+    static void measureMemoryTreeSet(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         TreeSet<Integer> set = new TreeSet<>();
-        for (int i = 0; i < MEM_N; i++) set.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            set.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "TreeSet", MEM_N, bytesPer, before, after);
-        memCsv.printf("TreeSet,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("TreeSet,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         set = null;
         gcAndWait();
     }
 
-    static void measureMemoryHashMap(PrintWriter memCsv) {
+    static void measureMemoryHashMap(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         HashMap<Integer, Integer> map = new HashMap<>(MEM_N);
-        for (int i = 0; i < MEM_N; i++) map.put(new Integer(i), new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            map.put(i, i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "HashMap", MEM_N, bytesPer, before, after);
-        memCsv.printf("HashMap,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("HashMap,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         map = null;
         gcAndWait();
     }
 
-    static void measureMemoryTreeMap(PrintWriter memCsv) {
+    static void measureMemoryTreeMap(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         TreeMap<Integer, Integer> map = new TreeMap<>();
-        for (int i = 0; i < MEM_N; i++) map.put(new Integer(i), new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            map.put(i, i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "TreeMap", MEM_N, bytesPer, before, after);
-        memCsv.printf("TreeMap,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("TreeMap,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         map = null;
         gcAndWait();
     }
 
-    static void measureMemoryPriorityQueue(PrintWriter memCsv) {
+    static void measureMemoryPriorityQueue(BufferedWriter memCsv) throws IOException {
         gcAndWait();
         long before = usedMemory();
         PriorityQueue<Integer> pq = new PriorityQueue<>();
-        for (int i = 0; i < MEM_N; i++) pq.add(new Integer(i));
+        for (int i = 0; i < MEM_N; i++)
+            pq.add(i);
         gcAndWait();
         long after = usedMemory();
         double bytesPer = (after - before) / (double) MEM_N;
         System.out.printf("%-15s %-12d %-18.2f %-12d %-12d\n", "PriorityQueue", MEM_N, bytesPer, before, after);
-        memCsv.printf("PriorityQueue,%d,%.2f,%d,%d\n", MEM_N, bytesPer, before, after);
+        memCsv.write(String.format("PriorityQueue,%d,%.2f,%d,%d", MEM_N, bytesPer, before, after));
+        memCsv.newLine();
         pq = null;
         gcAndWait();
     }
