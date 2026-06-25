@@ -2,7 +2,7 @@ import java.util.*;
 import java.io.*;
 
 public class TimeA {
-    static int[] SIZES = {1_000};
+    static int[] SIZES = {1_000, 10_000, 100_000};
     static int OPS = 1_000_000;
     static final Random RAND = new Random(42);
     static long sink = 0;
@@ -18,6 +18,13 @@ public class TimeA {
         WARMUP = Math.max(1, Math.min(WARMUP, cap));
         // avoid excessively large warmups
         WARMUP = Math.min(WARMUP, 100_000);
+    }
+
+    // Adjust OPS based on size to keep runtime reasonable
+    static int getOpsForSize(int n) {
+        if (n >= 100_000) return 50_000;      // 100k+ sizes: fewer ops
+        if (n >= 10_000)  return 100_000;     // 10k sizes: moderate ops
+        return 1_000_000;                      // 1k sizes: full ops
     }
 
     public static void main(String[] args) throws IOException, InterruptedException {
@@ -39,7 +46,21 @@ public class TimeA {
         for (TestCase test : TestCase.values()) {
             long prev = -1;
             for (int n : SIZES) {
+                if (!test.shouldRun(n)) {
+                    System.out.printf("%-15s %-15s %-10d (skipped - O(n) at large size)\n", test.structure, test.operation, n);
+                    prev = -1;
+                    continue;
+                }
+                // Set OPS for this size and update warmup
+                int originalOps = OPS;
+                OPS = getOpsForSize(n);
+                updateWarmup();
+                
                 long ns = test.run(n, csv);
+                
+                OPS = originalOps;
+                updateWarmup();
+                
                 double ratio = prev > 0 ? (double) ns / prev : 0;
                 String ratioStr = prev > 0 ? String.format("%.2f", ratio) : "-";
                 System.out.printf("%-15s %-15s %-10d %-20d %-10s\n", test.structure, test.operation, n, ns, ratioStr);
@@ -496,6 +517,21 @@ public class TimeA {
         TestCase(String structure, String operation) {
             this.structure = structure;
             this.operation = operation;
+        }
+
+        // Skip O(n) operations at larger sizes to keep runtime reasonable
+        boolean shouldRun(int n) {
+            // O(n) operations only at smallest size
+            if (n > 1_000) {
+                switch (this) {
+                    case LINKEDLIST_GET:
+                    case LINKEDLIST_ADD_END:
+                    case LINKEDLIST_ADD_FRONT:
+                    case ARRAYLIST_ADD_FRONT:
+                        return false;
+                }
+            }
+            return true;
         }
 
         abstract long run(int n, BufferedWriter csv) throws IOException;
