@@ -10,7 +10,7 @@ public class TimeA {
     static int MEM_N = 1_000_000;
     static int WARMUP = 10_000;
     static final int MEM_WAIT_MS = 200;
-    static final String BASE_PATH = "C:\\Users\\britney.harris\\Documents\\Lobster-Stream\\Lobster-Stream-Lab2\\";
+    static final String BASE_PATH = System.getProperty("user.dir") + File.separator;
 
     static void updateWarmup() {
         // keep warmup reasonable relative to OPS (e.g. max OPS/10, at least 1)
